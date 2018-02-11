@@ -47,11 +47,7 @@ public final class HttpClientFactory {
             }
         }
         if (null == clazz) {
-            try {
-                clazz = Class.forName("twitter4j.HttpClientImpl");
-            } catch (ClassNotFoundException cnfe) {
-                throw new AssertionError(cnfe);
-            }
+            clazz = HttpClientImpl.class;
         }
         try {
             HTTP_CLIENT_CONSTRUCTOR = clazz.getConstructor(HttpClientConfiguration.class);
