@@ -591,7 +591,7 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
         return super.fillInIDAndScreenName(
                 new HttpParameter[]{new HttpParameter("include_email", conf.isIncludeEmailEnabled())});
     }
-    
+
     @Override
     public AccountSettings updateAccountSettings(Integer trend_locationWoeid,
                                                  Boolean sleep_timeEnabled, String start_sleepTime,
@@ -1774,7 +1774,7 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
                 response = http.get(url, null, auth, this);
             } finally {
                 long elapsedTime = System.currentTimeMillis() - start;
-                TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
+                //TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
             }
             return response;
         }
@@ -1792,7 +1792,7 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
                 response = http.get(url, mergeImplicitParams(params), auth, this);
             } finally {
                 long elapsedTime = System.currentTimeMillis() - start;
-                TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
+                //TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
             }
             return response;
         }
@@ -1810,7 +1810,7 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
                 response = http.post(url, IMPLICIT_PARAMS, auth, this);
             } finally {
                 long elapsedTime = System.currentTimeMillis() - start;
-                TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
+                // TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
             }
             return response;
         }
@@ -1828,7 +1828,7 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
                 response = http.post(url, mergeImplicitParams(params), auth, this);
             } finally {
                 long elapsedTime = System.currentTimeMillis() - start;
-                TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
+                // TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
             }
             return response;
         }
