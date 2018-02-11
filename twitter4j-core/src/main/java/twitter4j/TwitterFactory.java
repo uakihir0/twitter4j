@@ -44,36 +44,16 @@ public class TwitterFactory implements java.io.Serializable {
 
     static {
         // detecting Google App Engine
-        boolean gaeDetected;
-        try {
-            Class.forName("com.google.appengine.api.urlfetch.URLFetchService");
-            gaeDetected = true;
-        } catch (ClassNotFoundException cnfe) {
-            gaeDetected = false;
-        }
 
-        String className = null;
-        if (gaeDetected) {
-            final String APP_ENGINE_TWITTER_IMPL = "twitter4j.AppEngineTwitterImpl";
-            try {
-                Class.forName(APP_ENGINE_TWITTER_IMPL);
-                className = APP_ENGINE_TWITTER_IMPL;
-            } catch (ClassNotFoundException ignore) {
-            }
-        }
-        if (className == null) {
-            className = "twitter4j.TwitterImpl";
-        }
         Constructor<Twitter> constructor;
         Class clazz;
         try {
-            clazz = Class.forName(className);
+            clazz = TwitterImpl.class;
             constructor = clazz.getDeclaredConstructor(Configuration.class, Authorization.class);
         } catch (NoSuchMethodException e) {
             throw new AssertionError(e);
-        } catch (ClassNotFoundException e) {
-            throw new AssertionError(e);
         }
+
         TWITTER_CONSTRUCTOR = constructor;
 
         try {
