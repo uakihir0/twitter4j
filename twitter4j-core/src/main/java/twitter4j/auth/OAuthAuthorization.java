@@ -321,16 +321,16 @@ public class OAuthAuthorization implements Authorization, java.io.Serializable, 
             logger.error("Failed to get HmacSHA1 \"Message Authentication Code\" (MAC)", nsae);
 
             try {
-                Mac mac = Mac.getInstance("SHA1");
+                Mac mac = Mac.getInstance("SHA-1");
                 SecretKeySpec spec;
                 if (null == token) {
                     String oauthSignature = HttpParameter.encode(consumerSecret) + "&";
-                    spec = new SecretKeySpec(oauthSignature.getBytes(), "SHA1");
+                    spec = new SecretKeySpec(oauthSignature.getBytes(), "SHA-1");
                 } else {
                     spec = token.getSecretKeySpec();
                     if (null == spec) {
                         String oauthSignature = HttpParameter.encode(consumerSecret) + "&" + HttpParameter.encode(token.getTokenSecret());
-                        spec = new SecretKeySpec(oauthSignature.getBytes(), "SHA1");
+                        spec = new SecretKeySpec(oauthSignature.getBytes(), "SHA-1");
                         token.setSecretKeySpec(spec);
                     }
                 }
@@ -340,7 +340,7 @@ public class OAuthAuthorization implements Authorization, java.io.Serializable, 
                 logger.error("Failed initialize \"Message Authentication Code\" (MAC)", ike);
                 throw new AssertionError(ike);
             } catch (NoSuchAlgorithmException nsaee) {
-                logger.error("Failed to get HmacSHA1 \"Message Authentication Code\" (MAC)", nsae);
+                logger.error("Failed to get SHA-1 \"Message Authentication Code\" (MAC)", nsae);
                 throw new AssertionError(nsae);
             }
         }
