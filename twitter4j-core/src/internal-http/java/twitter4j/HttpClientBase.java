@@ -23,7 +23,7 @@ public abstract class HttpClientBase implements HttpClient, Serializable {
         requestHeaders.put("X-Twitter-Client", "Twitter4J");
         requestHeaders.put("User-Agent", "twitter4j http://twitter4j.org/ /" + Version.getVersion());
         if (conf.isGZIPEnabled()) {
-            requestHeaders.put("Accept-Encoding", "gzip");
+           // requestHeaders.put("Accept-Encoding", "gzip");
         }
     }
 
