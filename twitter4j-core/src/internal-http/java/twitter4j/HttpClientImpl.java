@@ -23,6 +23,8 @@ import java.net.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.CRC32;
+import java.util.zip.CheckedInputStream;
 
 /**
  * @author Yusuke Yamamoto - yusuke at mac.com
@@ -142,10 +144,11 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
                     }
 
                     con.getResponseCode();
-                    for(String key : con.getHeaderFields().keySet()){
+                    for (String key : con.getHeaderFields().keySet()) {
                         logger.debug("Header:" + key + "::" + con.getHeaderFields().get(key));
                     }
-
+                    
+                    checkGZIP(con.getInputStream());
                     res = new HttpResponseImpl(con, CONF);
                     responseCode = con.getResponseCode();
                     if (logger.isDebugEnabled()) {
@@ -197,6 +200,33 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
         }
         return res;
     }
+
+
+    private void checkGZIP(InputStream in) {
+        CRC32 crc32 = new CRC32();
+        CheckedInputStream ch = new CheckedInputStream(in, crc32);
+        crc32.reset();
+        try {
+            System.out.println("F1: " + readUByte(ch));
+            System.out.println("F2: " + readUByte(ch));
+            System.out.println("F3: " + readUByte(ch));
+            System.out.println("F4: " + readUByte(ch));
+            System.out.println("F5: " + readUByte(ch));
+            System.out.println("F6: " + readUByte(ch));
+        } catch (Exception e) {
+        }
+    }
+
+    private int readUByte(InputStream in) throws IOException {
+        int b = in.read();
+        if (b == -1) {
+            throw new EOFException();
+        }
+        if (b < -1 || b > 255) {
+        }
+        return b;
+    }
+
 
     /**
      * sets HTTP headers
