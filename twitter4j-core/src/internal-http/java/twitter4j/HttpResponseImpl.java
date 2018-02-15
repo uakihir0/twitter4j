@@ -20,13 +20,18 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.util.List;
 import java.util.Map;
+import java.util.zip.ZipException;
 
 /**
  * @author Yusuke Yamamoto - yusuke at mac.com
  * @since Twitter4J 2.1.2
  */
 public class HttpResponseImpl extends HttpResponse {
+
+    private static final Logger logger = Logger.getLogger(HttpResponseImpl.class);
+
     private HttpURLConnection con;
+
 
     HttpResponseImpl(HttpURLConnection con, HttpClientConfiguration conf) throws IOException {
         super(conf);
@@ -50,8 +55,13 @@ public class HttpResponseImpl extends HttpResponse {
             is = con.getInputStream();
         }
         if (is != null && "gzip".equals(con.getContentEncoding())) {
-            // the response is gzipped
-            is = new StreamingGZIPInputStream(is);
+
+            try {
+                // the response is gzipped
+                is = new StreamingGZIPInputStream(is);
+            }catch (ZipException ignore){
+                logger.info("GZIP: " + ignore.getMessage());
+            }
         }
     }
 
