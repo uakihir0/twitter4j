@@ -7,7 +7,7 @@ import twitter4j.conf.ConfigurationContext;
  * @since Twitter4J 2.1.1
  */
 final class StdOutLogger extends Logger {
-    private static final boolean DEBUG = ConfigurationContext.getInstance().isDebugEnabled();
+    private static final boolean DEBUG = true;
 
     @Override
     public boolean isDebugEnabled() {

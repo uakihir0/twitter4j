@@ -140,6 +140,12 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
                         os.flush();
                         os.close();
                     }
+
+                    con.getResponseCode();
+                    for(String key : con.getHeaderFields().keySet()){
+                        logger.debug("Header:" + key + "::" + con.getHeaderFields().get(key));
+                    }
+
                     res = new HttpResponseImpl(con, CONF);
                     responseCode = con.getResponseCode();
                     if (logger.isDebugEnabled()) {
