@@ -16,6 +16,7 @@
 
 package twitter4j;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.util.List;
@@ -55,12 +56,19 @@ public class HttpResponseImpl extends HttpResponse {
             is = con.getInputStream();
         }
         if (is != null && "gzip".equals(con.getContentEncoding())) {
+            is  = new BufferedInputStream(is);
+            if(is.markSupported()) {
+                is.mark(64);
+            }
 
             try {
                 // the response is gzipped
                 is = new StreamingGZIPInputStream(is);
             }catch (ZipException ignore){
                 logger.info("GZIP: " + ignore.getMessage());
+                if(is.markSupported()) {
+                    is.reset();
+                }
             }
         }
     }
