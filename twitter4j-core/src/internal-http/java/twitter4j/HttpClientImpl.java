@@ -197,10 +197,6 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
             }
         }
 
-        if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG) && res != null) {
-            logger.debug("Body: " + res.asString());
-        }
-
         return res;
     }
 
