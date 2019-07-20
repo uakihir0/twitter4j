@@ -16,6 +16,7 @@
 
 package twitter4j;
 
+import net.socialhub.logger.Logger;
 import twitter4j.conf.ConfigurationContext;
 
 import java.io.*;
@@ -28,7 +29,7 @@ import java.util.Map;
  * @author Yusuke Yamamoto - yusuke at mac.com
  */
 public abstract class HttpResponse {
-    private static final Logger logger = Logger.getLogger(HttpResponseImpl.class);
+    private static final net.socialhub.logger.Logger logger = net.socialhub.logger.Logger.getLogger(HttpResponseImpl.class);
     protected final HttpClientConfiguration CONF;
 
     HttpResponse() {
@@ -139,7 +140,7 @@ public abstract class HttpResponse {
                     logger.debug(json.toString(1));
                 } else {
                     logger.debug(responseAsString != null ? responseAsString :
-                        json.toString());
+                            json.toString());
                 }
             } catch (JSONException jsone) {
                 if (responseAsString == null) {
@@ -183,10 +184,10 @@ public abstract class HttpResponse {
                     logger.debug(jsonArray.toString(1));
                 } else {
                     logger.debug(responseAsString != null ? responseAsString :
-                        jsonArray.toString());
+                            jsonArray.toString());
                 }
             } catch (JSONException jsone) {
-                if (logger.isDebugEnabled()) {
+                if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG)) {
                     throw new TwitterException(jsone.getMessage() + ":" + this.responseAsString, jsone);
                 } else {
                     throw new TwitterException(jsone.getMessage(), jsone);
@@ -224,10 +225,10 @@ public abstract class HttpResponse {
     @Override
     public String toString() {
         return "HttpResponse{" +
-            "statusCode=" + statusCode +
-            ", responseAsString='" + responseAsString + '\'' +
-            ", is=" + is +
-            ", streamConsumed=" + streamConsumed +
-            '}';
+                "statusCode=" + statusCode +
+                ", responseAsString='" + responseAsString + '\'' +
+                ", is=" + is +
+                ", streamConsumed=" + streamConsumed +
+                '}';
     }
 }

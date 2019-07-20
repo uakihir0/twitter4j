@@ -16,6 +16,7 @@
 
 package twitter4j;
 
+import net.socialhub.logger.Logger;
 import twitter4j.conf.ConfigurationContext;
 
 import java.io.*;
@@ -23,15 +24,13 @@ import java.net.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.zip.CRC32;
-import java.util.zip.CheckedInputStream;
 
 /**
  * @author Yusuke Yamamoto - yusuke at mac.com
  * @since Twitter4J 2.1.2
  */
 class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io.Serializable {
-    private static final Logger logger = Logger.getLogger(HttpClientImpl.class);
+    private static final net.socialhub.logger.Logger logger = net.socialhub.logger.Logger.getLogger(HttpClientImpl.class);
 
 
     static {
@@ -131,7 +130,7 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
                             con.setRequestProperty("Content-Type",
                                     "application/x-www-form-urlencoded");
                             String postParam = HttpParameter.encodeParameters(req.getParameters());
-                            logger.debug("Post Params: ", postParam);
+                            logger.debug("Post Params: " + postParam);
                             byte[] bytes = postParam.getBytes("UTF-8");
                             con.setRequestProperty("Content-Length",
                                     Integer.toString(bytes.length));
@@ -150,7 +149,7 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
 
                     res = new HttpResponseImpl(con, CONF);
                     responseCode = con.getResponseCode();
-                    if (logger.isDebugEnabled()) {
+                    if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG)) {
                         logger.debug("Response: ");
                         Map<String, List<String>> responseHeaders = con.getHeaderFields();
                         for (String key : responseHeaders.keySet()) {
@@ -188,7 +187,7 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
                 }
             }
             try {
-                if (logger.isDebugEnabled() && res != null) {
+                if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG) && res != null) {
                     res.asString();
                 }
                 logger.debug("Sleeping " + CONF.getHttpRetryIntervalSeconds() + " seconds until the next retry.");
@@ -197,6 +196,11 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
                 //nothing to do
             }
         }
+
+        if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG) && res != null) {
+            logger.debug("Body: " + res.asString());
+        }
+
         return res;
     }
 
@@ -207,15 +211,15 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
      * @param connection HttpURLConnection
      */
     private void setHeaders(HttpRequest req, HttpURLConnection connection) {
-        if (logger.isDebugEnabled()) {
+        if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG)) {
             logger.debug("Request: ");
-            logger.debug(req.getMethod().name() + " ", req.getURL());
+            logger.debug(req.getMethod().name() + " " + req.getURL());
         }
 
         String authorizationHeader;
         if (req.getAuthorization() != null && (authorizationHeader = req.getAuthorization().getAuthorizationHeader(req)) != null) {
-            if (logger.isDebugEnabled()) {
-                logger.debug("Authorization: ", authorizationHeader.replaceAll(".", "*"));
+            if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG)) {
+                logger.debug("Authorization: " + authorizationHeader.replaceAll(".", "*"));
             }
             connection.addRequestProperty("Authorization", authorizationHeader);
         }
@@ -231,7 +235,7 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
         HttpURLConnection con;
         if (isProxyConfigured()) {
             if (CONF.getHttpProxyUser() != null && !CONF.getHttpProxyUser().equals("")) {
-                if (logger.isDebugEnabled()) {
+                if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG)) {
                     logger.debug("Proxy AuthUser: " + CONF.getHttpProxyUser());
                     logger.debug("Proxy AuthPassword: " + CONF.getHttpProxyPassword().replaceAll(".", "*"));
                 }
@@ -251,7 +255,7 @@ class HttpClientImpl extends HttpClientBase implements HttpResponseCode, java.io
             }
             final Proxy proxy = new Proxy(Proxy.Type.HTTP, InetSocketAddress
                     .createUnresolved(CONF.getHttpProxyHost(), CONF.getHttpProxyPort()));
-            if (logger.isDebugEnabled()) {
+            if (logger.getLogLevel().isLogTarget(Logger.LogLevel.DEBUG)) {
                 logger.debug("Opening proxied connection(" + CONF.getHttpProxyHost() + ":" + CONF.getHttpProxyPort() + ")");
             }
             con = (HttpURLConnection) new URL(url).openConnection(proxy);

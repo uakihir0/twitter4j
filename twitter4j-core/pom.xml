@@ -94,7 +94,18 @@
             <archive>http://groups.google.com/group/twitter4j</archive>
         </mailingList>
     </mailingLists>
+    <repositories>
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+    </repositories>
     <dependencies>
+        <dependency>
+            <groupId>com.github.uakihir0</groupId>
+            <artifactId>JLogger</artifactId>
+            <version>1.1</version>
+        </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
