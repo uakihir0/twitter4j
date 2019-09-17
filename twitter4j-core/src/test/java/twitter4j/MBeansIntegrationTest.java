@@ -15,16 +15,24 @@
  */
 package twitter4j;
 
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 /**
  * Integration tests for APIStatistics ensuring that the integration logic
  * in Twitter (API client) works.
  *
  * @author Nick Dellamaggiore (nick.dellamaggiore at gmail.com)
  */
-public class MBeansIntegrationTest extends TwitterTestBase {
+class MBeansIntegrationTest extends TwitterTestBase {
 
-    public MBeansIntegrationTest(String name) {
-        super(name);
+    @Test
+    void testMonitoringIntegration() throws Exception {
+        // monitoring is turned on with mbeanEnabled=true
+        TwitterAPIMonitor monitor = TwitterAPIMonitor.getInstance();
+        long count = monitor.getStatistics().getCallCount();
+        twitter1.getHomeTimeline();
+        assertEquals(count + 1, monitor.getStatistics().getCallCount());
     }
-
 }

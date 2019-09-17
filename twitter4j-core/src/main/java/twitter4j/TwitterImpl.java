@@ -23,10 +23,7 @@ import twitter4j.conf.Configuration;
 
 import java.io.*;
 import java.net.URLEncoder;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static twitter4j.HttpParameter.getParameterArray;
@@ -40,9 +37,20 @@ import static twitter4j.HttpParameter.getParameterArray;
  */
 class TwitterImpl extends TwitterBaseImpl implements Twitter {
     private static final long serialVersionUID = 9170943084096085770L;
+    private static final Logger logger = Logger.getLogger(TwitterBaseImpl.class);
+    
     private final String IMPLICIT_PARAMS_STR;
     private final HttpParameter[] IMPLICIT_PARAMS;
     private final HttpParameter INCLUDE_MY_RETWEET;
+    
+    private final String CHUNKED_INIT = "INIT";
+    private final String CHUNKED_APPEND = "APPEND";
+    private final String CHUNKED_FINALIZE = "FINALIZE";
+    private final String CHUNKED_STATUS = "STATUS";
+    
+	private final int MB = 1024 * 1024; // 1 MByte
+	private final int MAX_VIDEO_SIZE = 512 * MB; // 512MB is a constraint  imposed by Twitter for video files
+	private final int CHUNK_SIZE = 2 * MB; // max chunk size
 
     private static final ConcurrentHashMap<Configuration, HttpParameter[]> implicitParamsMap = new ConcurrentHashMap<Configuration, HttpParameter[]>();
     private static final ConcurrentHashMap<Configuration, String> implicitParamsStrMap = new ConcurrentHashMap<Configuration, String>();
@@ -234,6 +242,11 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
     }
 
     @Override
+    public Status unRetweetStatus(long statusId) throws TwitterException {
+        return factory.createStatus(post(conf.getRestBaseURL() + "statuses/unretweet/" + statusId + ".json"));
+    }
+
+    @Override
     public OEmbed getOEmbed(OEmbedRequest req) throws TwitterException {
         return factory.createOEmbed(get(conf.getRestBaseURL()
                 + "statuses/oembed.json", req.asHttpParameterArray()));
@@ -257,6 +270,134 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
                 , new HttpParameter("media", fileName, image)).asJSONObject());
     }
 
+	@Override
+	public UploadedMedia uploadMediaChunked(String fileName, InputStream media) throws TwitterException {
+		//If the InputStream is remote, this is will download it into memory speeding up the chunked upload process 
+		byte[] dataBytes = null;
+		try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream(256 * 1024);
+            byte[] buffer = new byte[32768];
+            int n;
+            while((n = media.read(buffer)) != -1) {
+                baos.write(buffer, 0, n);
+            }
+            dataBytes = baos.toByteArray();
+            if (dataBytes.length > MAX_VIDEO_SIZE) {
+				throw new TwitterException(String.format(Locale.US,
+						"video file can't be longer than: %d MBytes",
+						MAX_VIDEO_SIZE / MB));
+			}
+		} catch (IOException ioe) {
+			throw new TwitterException("Failed to download the file.", ioe);
+		}
+		
+		try {
+
+			UploadedMedia uploadedMedia = uploadMediaChunkedInit(dataBytes.length);
+			//no need to close ByteArrayInputStream
+			ByteArrayInputStream dataInputStream = new ByteArrayInputStream(dataBytes);
+			
+			byte[] segmentData = new byte[CHUNK_SIZE];
+			int segmentIndex = 0;
+			int totalRead = 0;
+			int bytesRead = 0;
+			
+			while ((bytesRead = dataInputStream.read(segmentData)) > 0) {
+				totalRead = totalRead + bytesRead;
+				logger.debug("Chunked appened, segment index:" + segmentIndex + " bytes:" + totalRead + "/" + dataBytes.length );
+				//no need to close ByteArrayInputStream
+				ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(segmentData, 0 ,bytesRead);
+				uploadMediaChunkedAppend(fileName, byteArrayInputStream, segmentIndex, uploadedMedia.getMediaId());
+				segmentData = new byte[CHUNK_SIZE];
+				segmentIndex++;
+			}
+			return uploadMediaChunkedFinalize(uploadedMedia.getMediaId());
+		} catch (Exception e) {
+			 throw new TwitterException(e);
+		}
+	}
+    
+	// twurl -H upload.twitter.com "/1.1/media/upload.json" -d
+	// "command=INIT&media_type=video/mp4&total_bytes=4430752"
+    
+    private UploadedMedia uploadMediaChunkedInit(long size) throws TwitterException {
+		return new UploadedMedia(post(
+				conf.getUploadBaseURL() + "media/upload.json",
+				new HttpParameter[] { new HttpParameter("command", CHUNKED_INIT),
+						new HttpParameter("media_type", "video/mp4"), 
+						new HttpParameter("media_category", "tweet_video"),
+						new HttpParameter("total_bytes", size) })
+				.asJSONObject());
+	}
+
+	// twurl -H upload.twitter.com "/1.1/media/upload.json" -d
+	// "command=APPEND&media_id=601413451156586496&segment_index=0" --file
+	// /path/to/video.mp4 --file-field "media"
+
+    private void uploadMediaChunkedAppend(String fileName, InputStream media, int segmentIndex, long mediaId) throws TwitterException {
+		post(conf.getUploadBaseURL() + "media/upload.json", new HttpParameter[] {
+				new HttpParameter("command", CHUNKED_APPEND), new HttpParameter("media_id", mediaId),
+				new HttpParameter("segment_index", segmentIndex), new HttpParameter("media", fileName, media) });
+	}
+
+	// twurl -H upload.twitter.com "/1.1/media/upload.json" -d
+	// "command=FINALIZE&media_id=601413451156586496"
+
+	private UploadedMedia uploadMediaChunkedFinalize(long mediaId) throws TwitterException {
+		int tries = 0;
+		int maxTries = 20;
+		int lastProgressPercent = 0;
+		int currentProgressPercent = 0;
+		UploadedMedia uploadedMedia = uploadMediaChunkedFinalize0(mediaId);
+		while (tries < maxTries) {
+			if(lastProgressPercent == currentProgressPercent) {
+				tries++;
+			}
+			lastProgressPercent = currentProgressPercent;
+			String state = uploadedMedia.getProcessingState();
+			if (state.equals("failed")) {
+				throw new TwitterException("Failed to finalize the chuncked upload.");
+			}
+			if (state.equals("pending") || state.equals("in_progress")) {
+				currentProgressPercent = uploadedMedia.getProgressPercent();
+				int waitSec = Math.max(uploadedMedia.getProcessingCheckAfterSecs(), 1);
+				logger.debug("Chunked finalize, wait for:" + waitSec + " sec");
+				try {
+					Thread.sleep(waitSec * 1000);
+				} catch (InterruptedException e) {
+					throw new TwitterException("Failed to finalize the chuncked upload.", e);
+				}
+			}
+			if (state.equals("succeeded")) {
+				return uploadedMedia;
+			}
+			uploadedMedia = uploadMediaChunkedStatus(mediaId);
+		} 
+		throw new TwitterException("Failed to finalize the chuncked upload, progress has stopped, tried " + tries+1 + " times.");
+	}
+	
+	private UploadedMedia uploadMediaChunkedFinalize0(long mediaId) throws TwitterException {
+		JSONObject json = post(
+				conf.getUploadBaseURL() + "media/upload.json",
+				new HttpParameter[] {
+						new HttpParameter("command", CHUNKED_FINALIZE),
+						new HttpParameter("media_id", mediaId) })
+				.asJSONObject();
+		logger.debug("Finalize response:" + json);
+		return new UploadedMedia(json);
+	}
+	
+	private UploadedMedia uploadMediaChunkedStatus(long mediaId) throws TwitterException {
+		JSONObject json = get(
+				conf.getUploadBaseURL() + "media/upload.json",
+				new HttpParameter[] {
+						new HttpParameter("command", CHUNKED_STATUS),
+						new HttpParameter("media_id", mediaId) })
+				.asJSONObject();
+		logger.debug("Status response:" + json);
+		return new UploadedMedia(json);
+	}
+    
     /* Search Resources */
 
     @Override
@@ -272,55 +413,130 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
 
     /* Direct Messages Resources */
 
+
     @Override
-    public ResponseList<DirectMessage> getDirectMessages() throws TwitterException {
-        return factory.createDirectMessageList(get(conf.getRestBaseURL() + "direct_messages.json?full_text=true"));
+    public DirectMessageList getDirectMessages(int count) throws TwitterException {
+        return factory.createDirectMessageList(get(conf.getRestBaseURL() + "direct_messages/events/list.json"
+                , new HttpParameter("count", count) ));
     }
 
     @Override
-    public ResponseList<DirectMessage> getDirectMessages(Paging paging) throws TwitterException {
-        return factory.createDirectMessageList(get(conf.getRestBaseURL() + "direct_messages.json"
-            , mergeParameters(paging.asPostParameterArray(), new HttpParameter("full_text", true))));
+    public DirectMessageList getDirectMessages(int count, String cursor) throws TwitterException {
+        return factory.createDirectMessageList(get(conf.getRestBaseURL() + "direct_messages/events/list.json"
+                , new HttpParameter("count", count)
+                , new HttpParameter("cursor", cursor)));
     }
 
-    @Override
-    public ResponseList<DirectMessage> getSentDirectMessages() throws TwitterException {
-        return factory.createDirectMessageList(get(conf.getRestBaseURL() + "direct_messages/sent.json?full_text=true"));
-    }
-
-    @Override
-    public ResponseList<DirectMessage> getSentDirectMessages(Paging paging) throws TwitterException {
-        return factory.createDirectMessageList(get(conf.getRestBaseURL() +
-            "direct_messages/sent.json"
-            , mergeParameters(paging.asPostParameterArray(), new HttpParameter("full_text", true))));
-    }
 
     @Override
     public DirectMessage showDirectMessage(long id) throws TwitterException {
-        return factory.createDirectMessage(get(conf.getRestBaseURL() + "direct_messages/show.json?id=" + id
-            + "&full_text=true"));
+        return factory.createDirectMessage(get(conf.getRestBaseURL() + "direct_messages/events/show.json?id=" + id));
     }
 
     @Override
-    public DirectMessage destroyDirectMessage(long id) throws
-        TwitterException {
-        return factory.createDirectMessage(post(conf.getRestBaseURL() + "direct_messages/destroy.json?id=" + id
-            + "&full_text=true"));
+    public void destroyDirectMessage(long id) throws TwitterException {
+        ensureAuthorizationEnabled();
+        http.delete(conf.getRestBaseURL() + "direct_messages/events/destroy.json?id=" + id, null, auth, null);
     }
 
     @Override
-    public DirectMessage sendDirectMessage(long userId, String text)
+    public DirectMessage sendDirectMessage(long recipientId, String text, QuickReply... quickReplies)
+            throws TwitterException {
+        try {
+            return factory.createDirectMessage(post(conf.getRestBaseURL() + "direct_messages/events/new.json",
+                    createMessageCreateJsonObject(recipientId, text, -1L,  null, quickReplies)));
+        } catch (JSONException e) {
+            throw new TwitterException(e);
+        }
+    }
+    @Override
+    public DirectMessage sendDirectMessage(long recipientId, String text, String quickReplyResponse)
+            throws TwitterException {
+        try {
+            return factory.createDirectMessage(post(conf.getRestBaseURL() + "direct_messages/events/new.json",
+                    createMessageCreateJsonObject(recipientId, text, -1L,  quickReplyResponse)));
+        } catch (JSONException e) {
+            throw new TwitterException(e);
+        }
+    }
+
+    private static JSONObject createMessageCreateJsonObject(long recipientId, String text, long mediaId, String quickReplyResponse, QuickReply... quickReplies) throws JSONException {
+        String type = mediaId == -1 ? null : "media";
+
+        final JSONObject messageDataJSON = new JSONObject();
+
+        final JSONObject target = new JSONObject();
+        target.put("recipient_id", recipientId);
+        messageDataJSON.put("target", target);
+
+        final JSONObject messageData = new JSONObject();
+        messageData.put("text", text);
+        if (type != null && mediaId != -1) {
+            final JSONObject attachment = new JSONObject();
+            attachment.put("type", type);
+            if (type.equals("media")) {
+                final JSONObject media = new JSONObject();
+                media.put("id", mediaId);
+                attachment.put("media", media);
+            }
+            messageData.put("attachment", attachment);
+        }
+        // https://developer.twitter.com/en/docs/direct-messages/quick-replies/api-reference/options
+        if (quickReplies.length > 0) {
+            JSONObject quickReplyJSON = new JSONObject();
+            quickReplyJSON.put("type", "options");
+            JSONArray jsonArray = new JSONArray();
+            for (QuickReply quickReply : quickReplies) {
+                JSONObject option = new JSONObject();
+                option.put("label", quickReply.getLabel());
+                if (quickReply.getDescription() != null) {
+                    option.put("description", quickReply.getDescription());
+                }
+                if (quickReply.getMetadata() != null) {
+                    option.put("metadata", quickReply.getMetadata());
+                }
+                jsonArray.put(option);
+            }
+            quickReplyJSON.put("options",jsonArray);
+            messageData.put("quick_reply", quickReplyJSON);
+        }
+        if (quickReplyResponse != null) {
+            JSONObject quickReplyResponseJSON = new JSONObject();
+            quickReplyResponseJSON.put("type","options");
+            quickReplyResponseJSON.put("metadata", quickReplyResponse);
+            messageData.put("quick_reply_response", quickReplyResponseJSON);
+        }
+        messageDataJSON.put("message_data", messageData);
+
+        final JSONObject json = new JSONObject();
+        final JSONObject event = new JSONObject();
+        event.put("type", "message_create");
+        event.put("message_create", messageDataJSON);
+        json.put("event", event);
+
+        return json;
+    }
+
+    @Override
+    public DirectMessage sendDirectMessage(long recipientId, String text, long mediaId)
+            throws TwitterException {
+        try {
+            return factory.createDirectMessage(post(conf.getRestBaseURL() + "direct_messages/events/new.json",
+                    createMessageCreateJsonObject(recipientId, text, mediaId, null)));
+        } catch (JSONException e) {
+            throw new TwitterException(e);
+        }
+    }
+
+    @Override
+    public DirectMessage sendDirectMessage(long recipientId, String text)
         throws TwitterException {
-        return factory.createDirectMessage(post(conf.getRestBaseURL() + "direct_messages/new.json"
-            , new HttpParameter("user_id", userId), new HttpParameter("text", text)
-            , new HttpParameter("full_text", true)));
+        return this.sendDirectMessage(recipientId, text, -1L);
     }
 
     @Override
     public DirectMessage sendDirectMessage(String screenName, String text) throws TwitterException {
-        return factory.createDirectMessage(post(conf.getRestBaseURL() + "direct_messages/new.json"
-            , new HttpParameter("screen_name", screenName), new HttpParameter("text", text)
-            , new HttpParameter("full_text", true)));
+        return this.sendDirectMessage(showUser(screenName).getId(), text);
     }
 
     @Override
@@ -622,6 +838,11 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
     }
 
     @Override
+    public AccountSettings updateAllowDmsFrom(String allowDmsFrom) throws TwitterException {
+        return factory.createAccountSettings(post(conf.getRestBaseURL() + "account/settings.json?allow_dms_from=" + allowDmsFrom));
+    }
+
+    @Override
     public User updateProfile(String name, String url
             , String location, String description) throws TwitterException {
         List<HttpParameter> profile = new ArrayList<HttpParameter>(4);
@@ -633,31 +854,6 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
                 , profile.toArray(new HttpParameter[profile.size()])));
     }
 
-    @Override
-    public User updateProfileBackgroundImage(File image, boolean tile)
-            throws TwitterException {
-        checkFileValidity(image);
-        return factory.createUser(post(conf.getRestBaseURL() + "account/update_profile_background_image.json",
-                new HttpParameter[]{new HttpParameter("image", image), new HttpParameter("tile", tile)}));
-    }
-
-    @Override
-    public User updateProfileBackgroundImage(InputStream image, boolean tile)
-            throws TwitterException {
-        return factory.createUser(post(conf.getRestBaseURL() + "account/update_profile_background_image.json"
-                , new HttpParameter[]{new HttpParameter("image", "image", image), new HttpParameter("tile", tile)}));
-    }
-
-    @Override
-    public User updateProfileColors(
-            String profileBackgroundColor,
-            String profileTextColor,
-            String profileLinkColor,
-            String profileSidebarFillColor,
-            String profileSidebarBorderColor)
-            throws TwitterException {
-        throw new UnsupportedOperationException("this API is no longer supported. https://twittercommunity.com/t/deprecation-of-account-update-profile-colors/28692");
-    }
 
     private void addParameterToList(List<HttpParameter> colors,
                                     String paramName, String color) {
@@ -1829,6 +2025,24 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
             } finally {
                 long elapsedTime = System.currentTimeMillis() - start;
                 // TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
+            }
+            return response;
+        }
+    }
+
+    private HttpResponse post(String url, JSONObject json) throws TwitterException {
+        ensureAuthorizationEnabled();
+        if (!conf.isMBeanEnabled()) {
+            return http.post(url, new HttpParameter[]{new HttpParameter(json)}, auth, this);
+        } else {
+            // intercept HTTP call for monitoring purposes
+            HttpResponse response = null;
+            long start = System.currentTimeMillis();
+            try {
+                response = http.post(url, new HttpParameter[]{new HttpParameter(json)}, auth, this);
+            } finally {
+                long elapsedTime = System.currentTimeMillis() - start;
+                TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
             }
             return response;
         }
