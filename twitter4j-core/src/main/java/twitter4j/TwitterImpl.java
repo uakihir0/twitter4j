@@ -2038,12 +2038,7 @@ class TwitterImpl extends TwitterBaseImpl implements Twitter {
             // intercept HTTP call for monitoring purposes
             HttpResponse response = null;
             long start = System.currentTimeMillis();
-            try {
-                response = http.post(url, new HttpParameter[]{new HttpParameter(json)}, auth, this);
-            } finally {
-                long elapsedTime = System.currentTimeMillis() - start;
-                TwitterAPIMonitor.getInstance().methodCalled(url, elapsedTime, isOk(response));
-            }
+            response = http.post(url, new HttpParameter[]{new HttpParameter(json)}, auth, this);
             return response;
         }
     }
