@@ -232,8 +232,9 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
             // dispatcher is held statically, but it'll be instantiated with
             // the configuration instance associated with this TwitterStream
             // instance which invokes getDispatcher() on the first time.
-            TwitterStreamImpl.dispatcher = new DispatcherFactory(conf).getInstance();
+            TwitterStreamImpl.dispatcher = new DispatcherImpl(conf);
         }
+        logger.info("Filter Stream end getDispatcher().");
         return TwitterStreamImpl.dispatcher;
     }
 
