@@ -20,7 +20,6 @@ import twitter4j.conf.Configuration;
 import twitter4j.util.function.Consumer;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -58,7 +57,7 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
         stallWarningsGetParam = "stall_warnings=" + (conf.isStallWarningsEnabled() ? "true" : "false");
         stallWarningsParam = new HttpParameter("stall_warnings", conf.isStallWarningsEnabled());
     }
-    
+
     /* Streaming API */
 
     @Override
@@ -122,7 +121,7 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
         try {
             return new StatusStreamImpl(getDispatcher(), http.post(conf.getStreamBaseURL() + relativeUrl
                     , new HttpParameter[]{new HttpParameter("count", String.valueOf(count))
-                    , stallWarningsParam}, auth, null), conf);
+                            , stallWarningsParam}, auth, null), conf);
         } catch (IOException e) {
             throw new TwitterException(e);
         }
@@ -228,15 +227,12 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
 
 
     private Dispatcher getDispatcher() {
+        logger.info("Filter Stream getDispatcher().");
         if (null == TwitterStreamImpl.dispatcher) {
-            synchronized (TwitterStreamImpl.class) {
-                if (null == TwitterStreamImpl.dispatcher) {
-                    // dispatcher is held statically, but it'll be instantiated with
-                    // the configuration instance associated with this TwitterStream
-                    // instance which invokes getDispatcher() on the first time.
-                    TwitterStreamImpl.dispatcher = new DispatcherFactory(conf).getInstance();
-                }
-            }
+            // dispatcher is held statically, but it'll be instantiated with
+            // the configuration instance associated with this TwitterStream
+            // instance which invokes getDispatcher() on the first time.
+            TwitterStreamImpl.dispatcher = new DispatcherFactory(conf).getInstance();
         }
         return TwitterStreamImpl.dispatcher;
     }
@@ -251,6 +247,7 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
         startHandler(new TwitterStreamConsumer(Mode.status) {
             @Override
             public StatusStream getStream() throws TwitterException {
+                logger.info("Filter Stream getStream().");
                 return getFilterStream(query);
             }
         });
@@ -277,8 +274,9 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
     StatusStream getFilterStream(FilterQuery query) throws TwitterException {
         ensureAuthorizationEnabled();
         try {
+            logger.info("Filter Stream getFilterStream().");
             return new StatusStreamImpl(getDispatcher(), http.post(conf.getStreamBaseURL()
-                    + "statuses/filter.json"
+                            + "statuses/filter.json"
                     , query.asHttpParameterArray(stallWarningsParam), auth, null), conf);
         } catch (IOException e) {
             throw new TwitterException(e);
