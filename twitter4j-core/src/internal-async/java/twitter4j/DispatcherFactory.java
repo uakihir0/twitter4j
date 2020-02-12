@@ -30,6 +30,7 @@ final class DispatcherFactory {
     private final Configuration conf;
 
     public DispatcherFactory(Configuration conf) {
+        System.out.println(conf.getDispatcherImpl());
         dispatcherImpl = conf.getDispatcherImpl();
         this.conf = conf;
     }

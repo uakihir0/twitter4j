@@ -227,14 +227,16 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
 
 
     private Dispatcher getDispatcher() {
-        logger.info("Filter Stream getDispatcher().");
         if (null == TwitterStreamImpl.dispatcher) {
-            // dispatcher is held statically, but it'll be instantiated with
-            // the configuration instance associated with this TwitterStream
-            // instance which invokes getDispatcher() on the first time.
-            TwitterStreamImpl.dispatcher = new DispatcherImpl(conf);
+            synchronized (TwitterStreamImpl.class) {
+                if (null == TwitterStreamImpl.dispatcher) {
+                    // dispatcher is held statically, but it'll be instantiated with
+                    // the configuration instance associated with this TwitterStream
+                    // instance which invokes getDispatcher() on the first time.
+                    TwitterStreamImpl.dispatcher = new DispatcherImpl(conf);
+                }
+            }
         }
-        logger.info("Filter Stream end getDispatcher().");
         return TwitterStreamImpl.dispatcher;
     }
 
@@ -248,7 +250,6 @@ class TwitterStreamImpl extends TwitterBaseImpl implements TwitterStream {
         startHandler(new TwitterStreamConsumer(Mode.status) {
             @Override
             public StatusStream getStream() throws TwitterException {
-                logger.info("Filter Stream getStream().");
                 return getFilterStream(query);
             }
         });
